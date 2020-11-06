@@ -1,1 +1,149 @@
 
+
+```{r}
+library(tidyverse)
+```
+
+Laden, Entpacken und Daten RStudio zur Verfügung stellen:
+
+```{r}
+BX_Book_Ratings <- read_delim("BX-CSV-Dump/BX-Book-Ratings.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+BX_Books <- read_delim("BX-CSV-Dump/BX-Books.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+BX_Users <- read_delim("BX-CSV-Dump/BX-Users.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+```
+
+#Säubern und Transformation der Daten
+
+```{r}
+books <- BX_Books %>%
+  select(ISBN,`Book-Title`,`Book-Author`,`Year-Of-Publication`,Publisher)
+head(books)
+```
+
+```{r}
+users <- BX_Users %>%
+  mutate(Age = as.numeric(Age))
+```
+
+```{r}
+ratings <- BX_Book_Ratings %>%
+  left_join(books)
+```
+
+Bücher ohne Titel werden herausgefiltert:
+
+```{r}
+ratings <- ratings %>%
+  filter(!is.na(`Book-Title`))
+```
+
+
+```{r}
+ratings_per_user <- ratings %>%
+  group_by(`User-ID`) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+ratings_per_user
+```
+
+Nun filtern wir die Nutzer heraus, die keine Bewertung abgegeben haben:
+
+```{r}
+users <- users %>%
+  left_join(ratings_per_user) %>%
+  filter(n > 0)
+```
+
+```{r}
+users
+```
+
+```{r}
+users <- users %>%
+  filter(!is.na(Age)) %>%
+  mutate(country = str_remove(Location,".*,")) %>%
+  filter(country != "")
+head(users)
+```
+
+```{r}
+users %>%
+  group_by(country) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+```
+
+
+```{r}
+users <- users %>%
+  mutate(country = str_extract(country, "\\w+"))
+```
+
+```{r}
+(ratings.distribution <- ratings %>%
+  group_by(`User-ID`) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n)) %>%
+  group_by(n) %>%
+  summarize(m = n()) )
+```
+
+```{r}
+hist(ratings.distribution$n, breaks=100)
+```
+
+#Welche Bücher sind am Besten bewertet?
+
+
+```{r}
+ratings %>%
+  group_by(`Book-Title`) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = mean(`Book-Rating`)) %>%
+  arrange(desc(dieBestenBuecher)) %>%
+  head(.,10)
+```
+
+
+Sollte die Anzahl der Bewertung mit rein spielen?
+
+```{r}
+ratings %>%
+  group_by(`Book-Title`) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+  filter(wieviele > 10) %>%
+  head(.,10)
+```
+
+#Welche Autoren sind am Besten bewertet?
+
+```{r}
+ratings %>%
+  group_by(`Book-Author`) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+  filter(wieviele > 10) %>%
+  head(.,10)
+```
+
+#Welcher Verlag hat die Besten Bücher?
+
+```{r}
+ratings %>%
+  group_by(Publisher) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+  filter(wieviele > 10)  %>%
+  head(.,10)
+```
+
+
+
+
