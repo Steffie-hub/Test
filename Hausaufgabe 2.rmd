@@ -1,0 +1,331 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+books <- BX_Books %>%
+  select(ISBN,`Book-Title`,`Book-Author`,`Year-Of-Publication`,Publisher)
+head(books)
+```
+
+```{r}
+ratings <- BX_Book_Ratings %>%
+  left_join(books)
+```
+
+
+
+```{r}
+ratings <- ratings %>%
+  filter(!is.na(`Book-Title`))
+```
+
+
+```{r}
+ratings_per_user <- ratings %>%
+  group_by(`User-ID`) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+ratings_per_user
+```
+
+Nun filtern wir die Nutzer heraus, die keine Bewertung abgegeben haben:
+
+```{r}
+users <- BX_Users %>%
+  left_join(ratings_per_user) %>%
+  filter(n > 0)
+```
+```{r}
+users
+```
+
+```{r}
+users <- users %>%
+  filter(!is.na(Age)) %>%
+  mutate(country = str_remove(Location,".*,")) %>%
+  filter(country != "")
+head(users)
+```
+
+```{r}
+users %>%
+  group_by(country) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+```
+
+```{r}
+users <- users %>%
+  mutate(country = str_extract(country, "\\w+"))
+```
+
+```{r}
+(ratings.distribution <- ratings %>%
+  group_by(`User-ID`) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n)) %>%
+  group_by(n) %>%
+  summarize(m = n()) )
+```
+
+#Welche Bücher sind am Besten bewertet?
+
+
+```{r}
+ratings %>%
+  group_by(`Book-Title`) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = mean(`Book-Rating`)) %>%
+  arrange(desc(dieBestenBuecher)) %>%
+  head(.,10)
+```
+
+Sollte die Anzahl der Bewertung mit rein spielen?
+
+```{r}
+ratings %>%
+  group_by(`Book-Title`) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+  filter(wieviele > 10) %>%
+  head(.,10)
+```
+
+#Welche Autoren sind am Besten bewertet?
+
+```{r}
+ratings %>%
+  group_by(`Book-Author`) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+  filter(wieviele > 10) %>%
+  head(.,10)
+```
+
+
+#Welcher Verlag hat die Besten Bücher?
+
+```{r}
+ratings %>%
+  group_by(Publisher) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+  filter(wieviele > 10)  %>%
+  head(.,10)
+```
+
+
+
+#Gibt es eine lineare Beziehung zwischen Anzahl pro Publisher und Anzahl Ratings, die die Bücher eines Publishers erhalten?
+
+Die Anzahl der Bewertungen haben wir soeben ermittelt. wir benennen diese noch um in publisher1
+
+
+```{r}
+publisher <- ratings %>%
+  group_by(Publisher) %>%
+  filter(`Book-Rating` > 0) %>%
+  mutate(number_of_ratings = n()) %>%
+  select(Publisher, `Book-Title`, number_of_ratings) %>%
+  unique %>%
+  mutate(number_of_books = n()) %>%
+  select(number_of_books,number_of_ratings)
+```
+```{r}
+plot(publisher)
+```
+
+
+
+```{r}
+lm(publisher$number_of_books~publisher$number_of_ratings)
+```
+
+```{r}
+fit <- lm(publisher$number_of_books~publisher$number_of_ratings)
+summary(fit)
+```
+
+
+```{r}
+plot(publisher)
+abline(fit)
+```
+
+
+```{r}
+summary(publisher)
+```
+
+```{r}
+boxplot(publisher$number_of_ratings ~ publisher$number_of_books, varwidth = TRUE)
+```
+
+```{r}
+publisher1 <- ratings %>%
+  group_by(Publisher) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+arrange(desc(wieviele))
+publisher1
+```
+
+
+#Die Publisher mit den meisten Bewertungen haben oft eine Bewertung von 8.0
+
+
+```{r}
+publisher1 <- ratings %>%
+  group_by(Publisher) %>%
+  filter(`Book-Rating` > 0) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  arrange(desc(dieBestenBuecher), desc(wieviele)) %>%
+  filter(wieviele > 5) %>%
+  unique %>%
+arrange(wieviele)
+publisher1
+```
+
+
+```{r}
+publisher2 <- books %>%
+  group_by(Publisher) %>%
+  summarise(Anzahl = n()) %>%
+  arrange(desc(Anzahl)) %>%
+  filter(Anzahl > 49)
+publisher2
+```
+
+
+#Haben ältere Bücher mehr Ratings, weil sie mehr Zeit haben, um Ratings zu sammeln?
+
+```{r}
+books1 <- books %>%
+  select(`Year-Of-Publication`, Publisher, `Book-Author`)
+books1
+```
+```{r}
+books1 <- books1 %>%
+left_join(ratings)
+```
+
+```{r}
+books1 %>%
+  select(`Year-Of-Publication`, Publisher, `Book-Author`, `Book-Rating`) %>%
+     group_by(Publisher) %>%
+  filter(`Book-Rating` > 0) %>%
+  mutate(`Book-Rating` = mean(`Book-Rating`)) %>%
+  unique() %>%
+  arrange(desc(`Year-Of-Publication`))
+```
+
+#Nanu, es gibt Bücher aus der Zukunft???
+
+```{r}
+books2 <- books1 %>%
+select(`Year-Of-Publication`, Publisher, `Book-Author`, `Book-Rating`) %>%
+     group_by(Publisher) %>%
+  filter(`Book-Rating` > 0, `Year-Of-Publication` < 2020) %>%
+  mutate(`Book-Rating` = mean(`Book-Rating`)) %>%
+  unique() %>%
+   arrange(desc(`Book-Rating`))
+books2
+```
+
+```{r}
+num_ratings_vs_age <- ratings %>%
+  select(`Book-Title`, `Year-Of-Publication`, `Book-Rating`) %>%
+    filter(`Book-Rating` > 0) %>%
+  filter(`Year-Of-Publication` < 2005) %>%
+  filter(`Year-Of-Publication` > 1990) %>%
+  group_by(`Book-Title`) %>%
+  mutate(number_of_ratings = n()) %>%
+  unique %>%
+  mutate(book_age = 2004-`Year-Of-Publication`) %>%
+  unique() %>%
+  select(book_age, number_of_ratings)
+```
+
+
+
+```{r}
+boxplot(num_ratings_vs_age$number_of_ratings~num_ratings_vs_age$book_age)
+```
+#Ältere Bücher haben eher weniger Ratings, vermutlich weil die Ratings erst später eingeführt wurden und eher Neuerscheinungen bewertet werden.
+
+
+
+Wir logarithmisieren die Anzahl der Ratings:
+
+```{r}
+boxplot(log(num_ratings_vs_age$number_of_ratings) ~ num_ratings_vs_age$book_age, varwidt = TRUE, xlab = "Alter der Bücher", ylab = "Log Anzahl der Ratings")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
