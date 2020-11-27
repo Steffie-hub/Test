@@ -1,0 +1,174 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+#Laden und Daten
+
+```{r}
+library(tidyverse)
+library(arules)
+library(arulesViz)
+```
+
+```{r}
+read_csv("all2.csv")
+```
+
+```{r}
+all2
+```
+
+
+
+#1. Erstellen Sie eine Analyse, bei der nicth die Bücher, sondern die Autoren in den Transaktionen enthalten sind.
+
+
+```{r}
+i <- split(all2$`Book-Author`, all2$`User-ID`)
+txn <- as(i, "transactions")
+basket_rules <- apriori(txn, parameter = list(sup = 0.0020, conf = 0.005, minlen=2, target="rules"))
+```
+
+
+```{r}
+myRules_Direct <- as(basket_rules, "data.frame")
+basket_rules_hi <- head(basket_rules, by ="lift",100)
+head(myRules_Direct, 20)
+```
+
+
+
+```{r}
+plot(basket_rules_hi, method="graph", main="Books")
+```
+
+```{r}
+plot(basket_rules_hi, method="graph", main="Books", engine="interactive")
+```
+#2. Fällt Ihnen an der Datenqualität etwas auf?
+
+Mir fällt auf, dass es sich fast alles um US-Schriftsteller handelt. Auch unterschiedliche Schreibweisen sind erkennbar, z. B. Dean Koontz & Dean R. Koontz. Die Daten müssen wir scheinbar noch etwas bereinigen. Außerdem möchte ich die deutschen Schriftsteller herausfiltern.
+
+#3. Wie könnte man das mit regulären Ausdrücken beheben?
+
+```{r}
+Author1 <- all2 %>%
+  mutate(Age = as.numeric(Age)) %>%
+  filter(!is.na(Age)) %>%
+   select(`Book-Title`, `Book-Author`, `Year-Of-Publication`, Publisher, `Book-Rating`, Age, country) %>%
+   filter(grepl("[a-zA-Z]*", `Book-Author`)) %>%
+    group_by(`Book-Author`) %>%
+  filter(country == "germany") %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+   filter(dieBestenBuecher > 5.0) %>%
+  unique() %>%
+  arrange(desc(dieBestenBuecher))
+Author1
+```
+
+```{r}
+i <- split(Author1$`Book-Author`, Author1$dieBestenBuecher)
+txn <- as(i, "transactions")
+basket_rules <- apriori(txn, parameter = list(sup = 0.00020, conf = 0.005, minlen=2, target="rules"))
+```
+
+Für Deutschland sind leider nicht genügend Daten verfügbar? Dann konzentrieren wir uns mal auf die Bücher mit Rating > 6.
+
+
+```{r}
+Author1 <- all2 %>%
+  mutate(Age = as.numeric(Age)) %>%
+  filter(!is.na(Age)) %>%
+   select(`Book-Title`, `Book-Author`, `Year-Of-Publication`, Publisher, `Book-Rating`, Age, country) %>%
+   filter(grepl("[a-zA-Z]*", `Book-Author`)) %>%
+    group_by(`Book-Author`) %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+   filter(dieBestenBuecher > 6.0) %>%
+  unique() %>%
+  arrange(desc(wieviele))
+Author1
+```
+
+```{r}
+i <- split(Author1$`Book-Author`, Author1$dieBestenBuecher)
+txn <- as(i, "transactions")
+basket_rules <- apriori(txn, parameter = list(sup = 0.0002, conf = 0.005, minlen=2, target="rules"))
+```
+
+```{r}
+myRules_Direct <- as(basket_rules, "data.frame")
+basket_rules_hi <- head(basket_rules, by ="lift",100)
+head(myRules_Direct, 20)
+```
+
+```{r}
+plot(basket_rules_hi, method="graph", main="Books")
+```
+
+```{r}
+plot(basket_rules_hi, method="graph", main="Books", engine="interactive")
+```
+
+
+#4. Wie kann man nun noch sicherstellen, dass nur die Autoren weiterempfholen werden, deren Bücher man auch (mehrheitlich) gut fand?
+
+```{r}
+Author2 <- Author1 %>%
+  mutate(Age = as.numeric(Age)) %>%
+  filter(!is.na(Age)) %>%
+   select(`Book-Title`, `Book-Author`, `Year-Of-Publication`, Publisher, `Book-Rating`, Age, country) %>%
+   filter(grepl("[a-zA-Z]*", `Book-Author`)) %>%
+    group_by(`Book-Author`) %>%
+  filter(country == "germany") %>%
+  summarise(dieBestenBuecher = median(`Book-Rating`), wieviele = n()) %>%
+  filter(wieviele > 10) %>%
+  filter(dieBestenBuecher > 7.0) %>%
+  unique() %>%
+  arrange(desc(wieviele))
+Author2
+```
+
+
+
+```{r}
+i <- split(Author2$`Book-Author`, Author2$dieBestenBuecher, Author2$wieviele)
+txn <- as(i, "transactions")
+basket_rules <- apriori(txn, parameter = list(sup = 0.0020, conf = 0.005, minlen=2, target="rules"))
+```
+
+#5. Welche anderen Features wären sinnvoll?
+
+Es wäre sicherlich sinnvoll, das Alter bei den Empfehlungen mit zu berücksichtigen. Ebenso könnte man sich mit berücksichtigen, welcher User welche Bücher gelesen hat, das in Kategorien clustern und den User Empfehlungen aus der Kategorie empfehlen, die er gerade ansieht oder die er vielleicht auch schon in der Vergangenheit bevorzugt hat. Mit den Kategorien könnte man dann auch etwas spielen und Usern auch mal Empfehlungen aus einer anderen Kategorie aufzeigen, die andere User ebenfalls gut fanden.
+Sinvoll wäre es auch, die Bewertungen miteinander zu vergleichen. Nur weil die meisten User ein Buch mit 10.0 bewerten, heißt das ja nicht, dass alle Leser das auch so empfinden. Vielleicht kann man anhand der Bewertungen Parallen ziehen - der User bewertet ein Buch mit Median 10.0 und > 50 Bewertungen nur mit 6.0? Was sind dann seine 10.0-Bewertungen? Und welche User sehen das auch so? Und was haben die noch für Bücher gelesen?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,313 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+#Laden der Pakete & Daten:
+
+```{r}
+library(tidyverse)
+library(arules)
+library(arulesViz)
+library(e1071)
+library(pROC)
+library(caret)
+library(rpart)
+library(rpart.plot)
+```
+
+```{r}
+read_csv("titanic.csv")
+```
+
+
+```{r}
+glimpse(titanic)
+```
+
+#Allgemeine Auswertungen zur Titanic & Überlebenschance:
+
+```{r}
+titanic %>%
+  group_by(survived, sex) %>%
+  summarise(Anzahl = n())
+```
+
+```{r}
+titanic1 <- titanic %>%
+  group_by(sex) %>%
+  select(pclass, survived, sex, age) %>%
+  filter(survived == 1) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(!is.na(age)) %>%
+  summarise(Anzahl = n())
+titanic1
+```
+
+```{r}
+titanic2 <- titanic %>%
+  group_by(sex) %>%
+  select(pclass, survived, sex, age) %>%
+  filter(survived == 0) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(!is.na(age)) %>%
+  summarise(Anzahl = n())
+titanic2
+```
+Hauptsächlich sind Männer gestorben.
+
+```{r}
+titanic3 <- titanic %>%
+  group_by(age) %>%
+   filter(survived == 1) %>%
+select(pclass, survived, age) %>%
+mutate(age = as.numeric(age)) %>%
+filter(!is.na(age)) %>%
+  summarise(Anzahl = n()) %>%
+  arrange(desc(Anzahl))
+titanic3
+```
+
+
+```{r}
+titanic4 <- titanic %>%
+  group_by(age) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(!is.na(age)) %>%
+  filter(survived == 0)%>%
+  summarise(Anzahl = n()) %>%
+  arrange(desc(Anzahl))
+titanic4
+```
+
+Das Alter hilft uns hier nicht wirklich weiter, es sind zwar viele junge Überlebende dabei, auber auch sehr viele junge Menschen, die gestorben sind. Die Auswertung nach Geschlecht war eindeutiger!
+
+Schauen wir uns mal die Passagierklasse an:
+
+```{r}
+titanic %>%
+  group_by(pclass, survived) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(!is.na(age)) %>%
+  filter(survived == 1) %>%
+summarise(Anzahl = n()) %>%
+  unique()
+```
+
+```{r}
+titanic %>%
+  group_by(pclass, survived) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(!is.na(age)) %>%
+  filter(survived == 0) %>%
+summarise(Anzahl = n()) %>%
+  unique()
+```
+
+Auch die Passagierklasse hat scheinbar mit der Überlebenswahrscheinlichkeit zu tun. Man sieht, dass die meisten Überlebenden aus Passagierklasse 1 stammten, ebenso wie die meisten Sterbenden aus Klasse 3.
+
+```{r}
+titanic %>%
+  select(survived, age, sex) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(!is.na(age)) %>%
+filter(age < 18) %>%
+group_by(sex) %>%
+summarise(Anzahl = n()) 
+```
+
+```{r}
+titanic %>%
+  select(survived, age, sex) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(!is.na(age)) %>%
+filter(age < 18) %>%
+  filter(survived == 1) %>%
+group_by(sex) %>%
+summarise(Anzahl = n())
+```
+
+Scheinbar hatten Mädchen eine höhere Überlebenschance als Jungen. Hat die pcall etwas mit der Überlebenswahrscheinlichkeit zu tun?
+
+
+```{r}
+titanicall <- titanic %>%
+  select(survived,pclass, age, sex) %>%
+  mutate(age = as.numeric(str_replace(age,",","."))) %>%
+    mutate(sex = ifelse(sex == "female", 1, 0))
+```
+
+
+```{r}
+titanicall <- na.omit(titanicall)
+```
+
+
+
+```{r}
+set.seed(107)
+inTrain <- createDataPartition(
+  y = titanicall$survived,
+  p = .8,
+  list = FALSE)
+training <- titanicall[ inTrain,]
+testing <- titanicall[-inTrain,]
+```
+
+```{r}
+model <- svm(survived ~ ., data = training)
+summary(model)
+pred <- predict(model, testing[,-1], prabability = FALSE)
+```
+
+```{r}
+(test.results <- cbind(pred, testing))
+```
+
+```{r}
+test.results2 <- test.results %>%
+  mutate(pred = ifelse(pred>=0.5,1,0))
+table(test.results2$pred, testing$survived)
+```
+
+```{r}
+pROC_obj <- roc(test.results$survived, test.results$pred,
+            smoothed = TRUE,
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+```
+
+#Mit mehr als zwei Features: survived & pclass (hat die Überlebenswahrscheinlichkeit etwas mit der Klasse der Passagiere zu tun?)
+
+```{r}
+titanicall <- titanic %>%
+  select(survived,pclass, age, sex) %>%
+  mutate(age = as.numeric(str_replace(age,",","."))) %>%
+mutate(sex = ifelse(sex == "female", 1, 0))
+```
+
+
+```{r}
+titanicall <- na.omit(titanicall)
+```
+
+```{r}
+set.seed(107)
+inTrain <- createDataPartition(
+  y = titanicall$survived,
+  p = .8,
+  list = FALSE)
+training <- titanicall[ inTrain,]
+testing <- titanicall[-inTrain,]
+```
+
+```{r}
+model <- svm(survived ~ pclass, data = training)
+summary(model)
+pred <- predict(model, testing[,-1], prabability = FALSE)
+```
+
+
+```{r}
+(test.results <- cbind(pred, testing))
+```
+
+
+```{r}
+library(pROC)
+pROC_obj <- roc(test.results$survived, test.results$pred,
+            smoothed = TRUE,
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+```
+
+#oder mit dem Geschlecht?
+
+```{r}
+titanicall <- titanic %>%
+  select(survived,pclass, age, sex) %>%
+  mutate(age = as.numeric(str_replace(age,",","."))) %>%
+mutate(sex = ifelse(sex == "female", 1, 0))
+```
+
+
+```{r}
+titanicall <- na.omit(titanicall)
+```
+
+```{r}
+set.seed(107)
+inTrain <- createDataPartition(
+  y = titanicall$survived,
+  p = .8,
+  list = FALSE)
+training <- titanicall[ inTrain,]
+testing <- titanicall[-inTrain,]
+```
+
+```{r}
+model <- svm(survived ~ sex, data = training)
+summary(model)
+pred <- predict(model, testing[,-1], prabability = FALSE)
+```
+
+```{r}
+(test.results <- cbind(pred, testing))
+```
+
+```{r}
+library(pROC)
+pROC_obj <- roc(test.results$survived, test.results$pred,
+            smoothed = TRUE,
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+```
+
+##Was sind die Unterschiede in der Performance der Algorithmen? Finden Sie Erklärungen dafür!
+
+Decision Tree:
+
+```{r}
+library(rpart)
+library(rpart.plot)
+tree<- rpart(survived~., data = training, method = 'class')
+rpart.plot(tree)
+```
+
+Ich habe dazu im Internet ein Notebook gefunden, wo jemand die unterschiedlichen Methoden mit dem Datensatz Titanic gegenübergestell hat. 
+Leider bin ich am Versuch, dieses nachzubauen, gescheitert...
+Auf jeden FAll wurde dort für jede Methode ein "overall prediction Success", ein "survival prediction succes", ein "Death prediction success" und eine Zeit für den Datensatz Titanic ermittelt.
+Für die drei Methoden Decision Tree, Naive Bayes und Support Vector Machine gab es folgende Ergebnisse:
+
+Decision Tree: 
+Overall prediction succss:   77.5289
+Survival prediction success: 63.23529
+Death prediction success:    86.36364
+Time in sec:                 0.00266991
+
+Naive Bayes:
+Overall prediction succss:   79.77528
+Survival prediction success: 66.17647
+Death prediction success:    88.18182
+Time in sec:                 0.0416100
+
+Support Vector Machine (SVM):
+Overall prediction succss:   76.40449
+Survival prediction success: 66.17647
+Death prediction success:    82.72727
+Time in sec:                 0.0997958
+
+Wie man sieht, ist der Erfolg über alles der Naive Bayes von diesen drei Methoden die erfolgreichste.
+Bei der Richtigkeit zur Voraussage der Überlebenswahrscheinlichkeit führt die Naive Bayes zusammen mit der Support Vector Machine Methode.
+Bei der Richtigkeit zur Voraussage der Sterbenswahrscheinlichkeit führt wieder die Methode Naive Bayes.
+Bezüglich der benötigten Zeit zur Durchführung der Methoden benötigt die Support Vectorm Machine Methode am Längste.
+Das könnte daran liegen, dass aus den vorhandenen Prädiktoren zusätzliche Variablen gebildet werden.
+Die Methode Decision Tree benötigt am wenigsten Zeit, weil hier einfache "Ja/Nein-Abfragen einen Baum aufbauen". Diese sind wie man oben sieht in den Ebenen nicht unbedingt gleich
+So wird bei den Männern zunächst das Alter abgefragt, bei den Frauen die pclass.
+
+
+
+
